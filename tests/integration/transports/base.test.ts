@@ -24,7 +24,7 @@ describe("TransportRunnerBase", () => {
                 },
             });
 
-            server = await runner["setupServer"]();
+            server = await runner["createServer"]();
 
             expect(server.uiRegistry).toBeUndefined();
         });
@@ -38,7 +38,7 @@ describe("TransportRunnerBase", () => {
                 },
             });
 
-            server = await runner["setupServer"]();
+            server = await runner["createServer"]();
 
             expect(server.uiRegistry).toBeDefined();
             expect(server.uiRegistry).toHaveProperty("get");
@@ -58,7 +58,7 @@ describe("TransportRunnerBase", () => {
                 get: vi.fn(),
             } as unknown as UIRegistry;
 
-            server = await runner["setupServer"](undefined, {
+            server = await runner["createServer"]({
                 serverOptions: { uiRegistry: mockUIRegistry },
             });
 
@@ -79,7 +79,7 @@ describe("TransportRunnerBase", () => {
                 get: vi.fn(),
             } as unknown as UIRegistry;
 
-            server = await runner["setupServer"](undefined, {
+            server = await runner["createServer"]({
                 serverOptions: { uiRegistry: mockUIRegistry },
             });
 
@@ -96,7 +96,7 @@ describe("TransportRunnerBase", () => {
                 },
             });
 
-            server = await runner["setupServer"]();
+            server = await runner["createServer"]();
 
             expect(server.uiRegistry).toBeDefined();
             expect(server.uiRegistry).toHaveProperty("get");

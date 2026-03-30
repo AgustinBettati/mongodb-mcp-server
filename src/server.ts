@@ -18,7 +18,6 @@ import {
 import type { AnyToolBase, ToolCategory, ToolClass } from "./tools/tool.js";
 import { validateConnectionString } from "./helpers/connectionOptions.js";
 import { packageInfo } from "./common/packageInfo.js";
-import { type ConnectionErrorHandler } from "./common/connectionErrorHandler.js";
 import type { Elicitation } from "./elicitation.js";
 import { AllTools } from "./tools/index.js";
 import type { UIRegistry } from "./ui/registry/index.js";
@@ -37,8 +36,6 @@ export interface ServerOptions<
     mcpServer: McpServer;
     telemetry: Telemetry;
     elicitation: Elicitation;
-    /** @deprecated Will be removed in a future version. Use `SessionOptions.connectionErrorHandler` instead. */
-    connectionErrorHandler: ConnectionErrorHandler;
     uiRegistry?: UIRegistry;
     metrics: Metrics<TMetrics>;
     /**
@@ -118,7 +115,6 @@ export class Server<
     public readonly elicitation: Elicitation;
     private readonly toolConstructors: AnyToolClass[];
     public readonly tools: AnyToolBase[] = [];
-    public readonly connectionErrorHandler: ConnectionErrorHandler;
     public readonly uiRegistry?: UIRegistry;
     public readonly toolContext?: TContext;
     public readonly metrics: Metrics<TMetrics>;
@@ -139,7 +135,6 @@ export class Server<
         mcpServer,
         userConfig,
         telemetry,
-        connectionErrorHandler,
         elicitation,
         tools,
         uiRegistry,
@@ -152,7 +147,6 @@ export class Server<
         this.mcpServer = mcpServer;
         this.userConfig = userConfig;
         this.elicitation = elicitation;
-        this.connectionErrorHandler = connectionErrorHandler;
         this.toolConstructors = tools ?? AllTools;
         this.uiRegistry = uiRegistry;
         this.toolContext = toolContext;

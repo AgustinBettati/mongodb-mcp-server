@@ -12,7 +12,7 @@ import {
 } from "./configUtils.js";
 import { MCP_LOG_LEVELS } from "../logging/loggingTypes.js";
 import { monitoringServerFeatureValues, previewFeatureValues } from "../schemas.js";
-import { argMetadata, CliOptionsSchema as MongoshCliOptionsSchema } from "@mongosh/arg-parser/arg-parser";
+import { CliOptionsSchema as MongoshCliOptionsSchema } from "@mongosh/arg-parser/arg-parser";
 import { TRANSPORT_PAYLOAD_LIMITS } from "../../transports/constants.js";
 
 export const configRegistry = z4.registry<ConfigFieldMeta>();
@@ -242,27 +242,6 @@ const ServerConfigSchema = z4.object({
             "The HTTP response type for tool responses: 'sse' for Server-Sent Events, 'json' for standard JSON responses."
         )
         .register(configRegistry, { overrideBehavior: "not-allowed" }),
-    /** @deprecated Use `monitoringServerPort` instead. */
-    healthCheckPort: z4
-        .number()
-        .int()
-        .min(0, "Invalid healthCheckPort: must be at least 0")
-        .max(65535, "Invalid healthCheckPort: must be at most 65535")
-        .optional()
-        .describe(
-            "Deprecated. Use `monitoringServerPort` instead. Port number for the healthCheck HTTP server (only used when transport is 'http'). If provided, `healthCheckHost` must also be set."
-        )
-        .register(configRegistry, { overrideBehavior: "not-allowed" })
-        .register(argMetadata, { deprecationReplacement: "monitoringServerPort" }),
-    /** @deprecated Use `monitoringServerHost` instead. */
-    healthCheckHost: z4
-        .string()
-        .optional()
-        .describe(
-            "Deprecated. Use `monitoringServerHost` instead. Host address to bind the healthCheck HTTP server to (only used when transport is 'http'). If provided, `healthCheckPort` must also be set."
-        )
-        .register(configRegistry, { overrideBehavior: "not-allowed" })
-        .register(argMetadata, { deprecationReplacement: "monitoringServerHost" }),
     monitoringServerPort: z4
         .number()
         .int()

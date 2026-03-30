@@ -149,7 +149,6 @@ describe("MongoDBTool implementations", () => {
             userConfig,
             telemetry,
             mcpServer: internalMcpServer,
-            connectionErrorHandler: errorHandler,
             elicitation,
             tools: toolConstructors,
             metrics: new MockMetrics(),

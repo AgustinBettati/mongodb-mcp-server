@@ -160,7 +160,6 @@ export function setupIntegrationTest(
             telemetry,
             mcpServer: mcpServerInstance,
             elicitation,
-            connectionErrorHandler,
             uiRegistry,
             metrics: new MockMetrics(),
             ...serverOptions,

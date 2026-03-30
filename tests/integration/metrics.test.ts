@@ -51,8 +51,8 @@ describe("/metrics endpoint", () => {
     const monitoringUrl = (path: string): string => `${runner["monitoringServer"]!.serverAddress}${path}`;
 
     it("reflects built-in tool execution metrics after tool calls", async () => {
-        runner = new StreamableHttpRunner({ userConfig: config, tools: [EchoTool] });
-        await runner.start();
+        runner = new StreamableHttpRunner({ userConfig: config });
+        await runner.start({ serverOptions: { tools: [EchoTool] } });
 
         const client = await connectClient();
         await client.callTool({ name: "echo-tool", arguments: {} });
@@ -80,8 +80,8 @@ describe("/metrics endpoint", () => {
     });
 
     it("records error_type label on toolExecutionDuration histogram when a tool throws", async () => {
-        runner = new StreamableHttpRunner({ userConfig: config, tools: [ErrorTool] });
-        await runner.start();
+        runner = new StreamableHttpRunner({ userConfig: config });
+        await runner.start({ serverOptions: { tools: [ErrorTool] } });
 
         const client = await connectClient();
         await client.callTool({ name: "error-tool", arguments: {} });
@@ -99,8 +99,8 @@ describe("/metrics endpoint", () => {
     });
 
     it("increments mcp_session_created when clients connect", async () => {
-        runner = new StreamableHttpRunner({ userConfig: config, tools: [NoopTool] });
-        await runner.start();
+        runner = new StreamableHttpRunner({ userConfig: config });
+        await runner.start({ serverOptions: { tools: [NoopTool] } });
 
         await connectClient();
         await connectClient();
@@ -110,8 +110,8 @@ describe("/metrics endpoint", () => {
     });
 
     it("increments mcp_session_closed with reason when sessions close", async () => {
-        runner = new StreamableHttpRunner({ userConfig: config, tools: [NoopTool] });
-        await runner.start();
+        runner = new StreamableHttpRunner({ userConfig: config });
+        await runner.start({ serverOptions: { tools: [NoopTool] } });
 
         await connectClient();
         await connectClient();
@@ -154,9 +154,8 @@ describe("/metrics endpoint", () => {
             }
         }
 
-        runner = new StreamableHttpRunner({ userConfig: config, tools: [CustomTool], metrics });
-
-        await runner.start();
+        runner = new StreamableHttpRunner({ userConfig: config, metrics });
+        await runner.start({ serverOptions: { tools: [CustomTool] } });
 
         const client = await connectClient();
         await client.callTool({ name: "custom-tool", arguments: {} });

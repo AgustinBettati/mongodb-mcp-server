@@ -3,7 +3,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { LogId } from "../../../src/common/logging/index.js";
-import { defaultCreateConnectionManager } from "../../../src/common/connectionManager.js";
 import { Keychain } from "../../../src/common/keychain.js";
 import { defaultTestConfig, InMemoryLogger, timeout } from "../helpers.js";
 import { type UserConfig } from "../../../src/common/config/userConfig.js";
@@ -12,7 +11,11 @@ import type { OperationType, ToolArgs, ToolCategory, ToolExecutionContext } from
 import { ToolBase } from "../../../src/tools/tool.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { TelemetryToolMetadata } from "../../../src/telemetry/types.js";
-import type { RequestContext } from "../../../src/transports/base.js";
+import type {
+    CustomizableServerOptions,
+    CustomizableSessionOptions,
+    RequestContext,
+} from "../../../src/transports/base.js";
 import type { AnyToolClass, Server } from "../../../src/lib.js";
 
 describe("StreamableHttpRunner", () => {
@@ -230,7 +233,6 @@ describe("StreamableHttpRunner", () => {
             const logger = new InMemoryLogger(new Keychain());
             const runner = new StreamableHttpRunner({
                 userConfig: config,
-                createConnectionManager: defaultCreateConnectionManager,
                 additionalLoggers: [logger],
             });
             await runner.start();
@@ -251,13 +253,12 @@ describe("StreamableHttpRunner", () => {
     describe("with telemetry properties", () => {
         it("merges them with the base properties", async () => {
             config.telemetry = "enabled";
-            runner = new StreamableHttpRunner({
-                userConfig: config,
-                telemetryProperties: { hosting_mode: "vscode-extension" },
-            });
-            await runner.start();
+            runner = new StreamableHttpRunner({ userConfig: config });
+            await runner.start({ serverOptions: { telemetryProperties: { hosting_mode: "vscode-extension" } } });
 
-            const server = await runner["setupServer"]();
+            const server = await runner["createServer"]({
+                serverOptions: { telemetryProperties: { hosting_mode: "vscode-extension" } },
+            });
             const properties = server["telemetry"].getCommonProperties();
             expect(properties.hosting_mode).toBe("vscode-extension");
         });
@@ -580,72 +581,6 @@ describe("StreamableHttpRunner", () => {
     });
 
     describe("monitoring server", () => {
-        describe("using legacy healthCheck config (backwards compat)", () => {
-            beforeEach(() => {
-                config = {
-                    ...config,
-                    transport: "http",
-                    healthCheckPort: 3001,
-                    healthCheckHost: "127.0.0.1",
-                };
-            });
-
-            it("starts the monitoring server when configured", async () => {
-                runner = new StreamableHttpRunner({ userConfig: config });
-                await runner.start();
-
-                expect(runner["monitoringServer"]).toBeDefined();
-                expect(runner["monitoringServer"]!.serverAddress).toEqual("http://127.0.0.1:3001");
-                const healthResponse = await fetch("http://localhost:3001/health");
-                expect(healthResponse.status).toBe(200);
-                const healthData = (await healthResponse.json()) as unknown;
-                expect(healthData).toEqual({ status: "ok" });
-            });
-
-            it("does not start the monitoring server when not configured", async () => {
-                config.healthCheckHost = undefined;
-                config.healthCheckPort = undefined;
-                runner = new StreamableHttpRunner({ userConfig: config });
-                await runner.start();
-
-                expect(runner["monitoringServer"]).toBeUndefined();
-            });
-
-            it("errors out when healthCheck port is missing but host is provided", async () => {
-                config.healthCheckPort = undefined;
-                runner = new StreamableHttpRunner({ userConfig: config });
-
-                await expect(runner.start()).rejects.toThrowError();
-            });
-
-            it("errors out when healthCheck host is missing but port is provided", async () => {
-                config.healthCheckHost = undefined;
-                runner = new StreamableHttpRunner({ userConfig: config });
-
-                await expect(runner.start()).rejects.toThrowError();
-            });
-
-            it("errors out when healthcheck port is equal to MCP server port", async () => {
-                config.healthCheckPort = 3000;
-                config.httpPort = 3000;
-                runner = new StreamableHttpRunner({ userConfig: config });
-                await expect(runner.start()).rejects.toThrowError();
-            });
-
-            it("handles correctly when healthCheckPort is set to 0", async () => {
-                config.httpPort = 3000;
-                config.healthCheckPort = 0;
-                runner = new StreamableHttpRunner({ userConfig: config });
-                await runner.start();
-
-                expect(runner["monitoringServer"]).toBeDefined();
-                const healthResponse = await fetch(`${runner["monitoringServer"]!.serverAddress}/health`);
-                expect(healthResponse.status).toBe(200);
-                const healthData = (await healthResponse.json()) as unknown;
-                expect(healthData).toEqual({ status: "ok" });
-            });
-        });
-
         describe("using monitoringServer config", () => {
             beforeEach(() => {
                 config = {
@@ -724,36 +659,37 @@ describe("StreamableHttpRunner", () => {
         const requestInfoReceived = new Promise<ToolExecutionContext["requestInfo"]>((resolve) => {
             confirmRequestInfoReceived = resolve;
         });
-        runner = new StreamableHttpRunner({
-            userConfig: config,
-            tools: [
-                class RandomTool extends ToolBase {
-                    static toolName = "random-tool";
-                    public description = "Random tool";
-                    public argsShape = {};
-                    static category: ToolCategory = "mongodb";
-                    static operationType: OperationType = "metadata";
-                    protected execute(
-                        _: ToolArgs<typeof this.argsShape>,
-                        { requestInfo }: ToolExecutionContext
-                    ): Promise<CallToolResult> {
-                        confirmRequestInfoReceived?.(requestInfo);
-                        return Promise.resolve({
-                            content: [
-                                {
-                                    type: "text",
-                                    text: "Tool executed",
-                                },
-                            ],
-                        });
-                    }
-                    protected resolveTelemetryMetadata(): TelemetryToolMetadata {
-                        return {};
-                    }
-                },
-            ],
+        runner = new StreamableHttpRunner({ userConfig: config });
+        await runner.start({
+            serverOptions: {
+                tools: [
+                    class RandomTool extends ToolBase {
+                        static toolName = "random-tool";
+                        public description = "Random tool";
+                        public argsShape = {};
+                        static category: ToolCategory = "mongodb";
+                        static operationType: OperationType = "metadata";
+                        protected execute(
+                            _: ToolArgs<typeof this.argsShape>,
+                            { requestInfo }: ToolExecutionContext
+                        ): Promise<CallToolResult> {
+                            confirmRequestInfoReceived?.(requestInfo);
+                            return Promise.resolve({
+                                content: [
+                                    {
+                                        type: "text",
+                                        text: "Tool executed",
+                                    },
+                                ],
+                            });
+                        }
+                        protected resolveTelemetryMetadata(): TelemetryToolMetadata {
+                            return {};
+                        }
+                    },
+                ],
+            },
         });
-        await runner.start();
         const client = await connectClient({ additionalHeaders: { Authorization: "Bearer 1234" } });
         const response = await client.listTools();
         expect(response).toBeDefined();
@@ -779,8 +715,12 @@ describe("StreamableHttpRunner", () => {
             class CustomStreamableHttpRunner extends StreamableHttpRunner<UserConfig, ToolContext> {
                 protected async createServerForRequest({
                     request,
+                    serverOptions,
+                    sessionOptions,
                 }: {
                     request: RequestContext;
+                    serverOptions?: CustomizableServerOptions<UserConfig, ToolContext>;
+                    sessionOptions?: CustomizableSessionOptions<UserConfig>;
                 }): Promise<Server<UserConfig, ToolContext>> {
                     // Extract custom header to determine configuration
                     const userRole = request.headers?.["x-user-role"];
@@ -812,7 +752,9 @@ describe("StreamableHttpRunner", () => {
 
                     return this.createServer({
                         userConfig: sessionConfig,
+                        sessionOptions,
                         serverOptions: {
+                            ...serverOptions,
                             toolContext,
                         },
                     });
@@ -848,11 +790,8 @@ describe("StreamableHttpRunner", () => {
             }
 
             // Initialize custom runner with the config check tool
-            runner = new CustomStreamableHttpRunner({
-                userConfig: config,
-                tools: [ConfigCheckTool],
-            });
-            await runner.start();
+            runner = new CustomStreamableHttpRunner({ userConfig: config });
+            await runner.start({ serverOptions: { tools: [ConfigCheckTool] } });
 
             // Test 1: Analyst role gets read-only with limited results
             const analystClient = await connectClient({

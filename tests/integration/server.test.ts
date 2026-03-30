@@ -209,7 +209,6 @@ describe("Server integration test", () => {
             telemetry,
             mcpServer: mcpServerInstance,
             elicitation,
-            connectionErrorHandler,
             tools: [...tools],
             metrics: new MockMetrics(),
         });

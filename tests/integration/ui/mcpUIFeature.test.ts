@@ -206,7 +206,6 @@ describe("mcpUI feature with custom UIs", () => {
             telemetry,
             mcpServer: mcpServerInstance,
             elicitation,
-            connectionErrorHandler,
             uiRegistry: new UIRegistry({ customUIs: customUIsFunction }),
             metrics: new MockMetrics(),
         });

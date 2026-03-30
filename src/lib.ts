@@ -3,24 +3,7 @@ export { Session, type SessionOptions } from "./common/session.js";
 export { type UserConfig, UserConfigSchema } from "./common/config/userConfig.js";
 export { parseUserConfig, defaultParserOptions, type ParserOptions } from "./common/config/parseUserConfig.js";
 
-import { parseUserConfig } from "./common/config/parseUserConfig.js";
-import type { UserConfig } from "./common/config/userConfig.js";
-
-/** @deprecated Use `parseUserConfig` instead. */
-export function parseArgsWithCliOptions(cliArguments: string[]): {
-    warnings: string[];
-    parsed: UserConfig | undefined;
-    error: string | undefined;
-} {
-    return parseUserConfig({
-        args: cliArguments,
-    });
-}
-
-import { defaultCreateConnectionManager } from "./common/connectionManager.js";
-/** @deprecated Use `defaultCreateConnectionManager` instead. */
-const createMCPConnectionManager = defaultCreateConnectionManager;
-export { createMCPConnectionManager, defaultCreateConnectionManager };
+export { defaultCreateConnectionManager } from "./common/connectionManager.js";
 
 export { defaultCreateApiClient } from "./common/atlas/apiClient.js";
 export { defaultCreateAtlasLocalClient } from "./common/atlasLocal.js";

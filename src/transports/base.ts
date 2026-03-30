@@ -1,6 +1,6 @@
 import type { UserConfig } from "../common/config/userConfig.js";
 import { packageInfo } from "../common/packageInfo.js";
-import { type AnyToolClass, Server, type ServerOptions } from "../server.js";
+import { Server, type ServerOptions } from "../server.js";
 import { Session, type SessionOptions } from "../common/session.js";
 import { Telemetry } from "../telemetry/telemetry.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -9,18 +9,12 @@ import { CompositeLogger, ConsoleLogger, DiskLogger, McpLogger } from "../common
 import { ExportsManager } from "../common/exportsManager.js";
 import { DeviceId } from "../helpers/deviceId.js";
 import { Keychain } from "../common/keychain.js";
-import { defaultCreateConnectionManager, type ConnectionManagerFactoryFn } from "../common/connectionManager.js";
-import {
-    type ConnectionErrorHandler,
-    connectionErrorHandler as defaultConnectionErrorHandler,
-} from "../common/connectionErrorHandler.js";
+import { defaultCreateConnectionManager } from "../common/connectionManager.js";
+import { connectionErrorHandler as defaultConnectionErrorHandler } from "../common/connectionErrorHandler.js";
 import type { CommonProperties } from "../telemetry/types.js";
 import { Elicitation } from "../elicitation.js";
-import type { AtlasLocalClientFactoryFn } from "../common/atlasLocal.js";
 import { defaultCreateAtlasLocalClient } from "../common/atlasLocal.js";
-import { applyConfigOverrides } from "../common/config/configOverrides.js";
-import { ApiClient, type ApiClientFactoryFn } from "../common/atlas/apiClient.js";
-import { defaultCreateApiClient } from "../common/atlas/apiClient.js";
+import { ApiClient } from "../common/atlas/apiClient.js";
 import type { UIRegistry } from "../ui/registry/index.js";
 import { createDefaultMetrics, PrometheusMetrics, type DefaultMetrics } from "../common/metrics/index.js";
 import type { Metrics } from "../common/metrics/metricsTypes.js";
@@ -51,28 +45,6 @@ export type CustomizableServerOptions<TUserConfig extends UserConfig = UserConfi
      */
     telemetryProperties?: Partial<CommonProperties>;
 };
-
-/**
- * A function to dynamically generate `UserConfig` object, potentially unique to
- * each MCP client session.
- *
- * The function is passed a config context object containing:
- * 1. `userConfig`: The base `UserConfig` object that MongoDB MCP Server was
- *    started with, either through parsed CLI arguments or a static
- *    configuration injected through `TransportRunnerConfig`
- * 2. `request`: An optional, `RequestContext` object, available only when
- *    MongoDB MCP server is running over HTTP transport, that contains headers
- *    and query parameters received in MCP session initialization object.
- *
- * @see {@link UserConfig} to inspect the properties available on `userConfig`
- * object.
- * @see {@link RequestContext} to inspect the properties available on
- * `requestContext` object.
- */
-type CreateSessionConfigFn<TUserConfig extends UserConfig = UserConfig> = (context: {
-    userConfig: TUserConfig;
-    request?: RequestContext;
-}) => Promise<TUserConfig> | TUserConfig;
 
 /**
  * Configuration options for customizing how transport runners are initialized.
@@ -114,28 +86,6 @@ export type TransportRunnerConfig<
     userConfig: TUserConfig;
 
     /**
-     * @deprecated Use `start({ sessionOptions: {connectionManager: MyCustomConnectionManager} })` instead
-     * An optional factory function to generates an instance of
-     * `ConnectionManager`. When not provided, MongoDB MCP Server uses an
-     * internal implementation to manage connection to MongoDB deployments.
-     *
-     * Customize this only if the use-case involves handling the MongoDB
-     * connections differently and outside of MongoDB MCP server.
-     */
-    createConnectionManager?: ConnectionManagerFactoryFn;
-
-    /** @deprecated Use `start({ serverOptions: {connectionErrorHandler: MyCustomConnectionErrorHandler} })` instead */
-    connectionErrorHandler?: ConnectionErrorHandler;
-
-    /**
-     * @deprecated Use `start({ sessionOptions: {atlasLocalClient: MyCustomAtlasLocalClient} })` instead
-     * An optional factory function to create a client for working with Atlas
-     * local deployments. When not provided, MongoDB MCP Server uses an internal
-     * implementation to create the local Atlas client.
-     */
-    createAtlasLocalClient?: AtlasLocalClientFactoryFn;
-
-    /**
      * An optional list of loggers to be used in addition to the default logger
      * implementations. When not provided, MongoDB MCP Server will not utilize
      * any loggers other than the default that it works with.
@@ -173,30 +123,6 @@ export type TransportRunnerConfig<
      * ```
      */
     metrics?: Metrics<TMetrics>;
-
-    /**
-     * @deprecated This field will be removed in a future version. Use `createServer({ serverOptions: {telemetryProperties: MyCustomTelemetryProperties} })` instead.
-     */
-    telemetryProperties?: Partial<CommonProperties>;
-
-    /** @deprecated Use `createServer({ serverOptions: {tools: [...AllTools, MyCustomTool]} })` instead */
-    tools?: AnyToolClass[];
-
-    /**
-     * @deprecated This method will be removed in a future version. Use `createServer({ userConfig: MyCustomUserConfig})` instead.
-     */
-    createSessionConfig?: CreateSessionConfigFn<TUserConfig>;
-
-    /**
-     * @deprecated Use `createServer({ sessionOptions: {apiClient: MyCustomApiClient} })` instead
-     * An optional factory function to generates an instance of
-     * `ApiClient`. When not provided, MongoDB MCP Server uses an
-     * internal implementation to create the API client.
-     *
-     * Customize this only if the use-case involves handling the API client
-     * differently and outside of MongoDB MCP server.
-     */
-    createApiClient?: ApiClientFactoryFn;
 };
 
 export abstract class TransportRunnerBase<
@@ -210,41 +136,13 @@ export abstract class TransportRunnerBase<
     public deviceId: DeviceId;
     /** Base user configuration for the server. */
     protected readonly userConfig: TUserConfig;
-    /** @deprecated This method will be removed in a future version. Extend `StreamableHttpRunner` and override `createServerForRequest` instead. */
-    protected readonly createConnectionManager: ConnectionManagerFactoryFn;
-    /** @deprecated This method will be removed in a future version. Extend `StreamableHttpRunner` and override `createServerForRequest` instead. */
-    protected readonly connectionErrorHandler: ConnectionErrorHandler;
-    /** @deprecated This method will be removed in a future version. Extend `StreamableHttpRunner` and override `createServerForRequest` instead. */
-    protected readonly createAtlasLocalClient: AtlasLocalClientFactoryFn;
-    /** @deprecated This field will be removed in a future version. Use `start({ serverOptions: {telemetryProperties: MyCustomTelemetryProperties} })` instead. */
-    protected readonly telemetryProperties: Partial<CommonProperties>;
-    /** @deprecated This field will be removed in a future version. Use `start({ serverOptions: {tools: [...AllTools, MyCustomTool]} })` instead. */
-    protected readonly tools?: AnyToolClass[];
-    /** @deprecated This method will be removed in a future version. Extend `StreamableHttpRunner` and override `createServerForRequest` instead. */
-    protected readonly createSessionConfig?: CreateSessionConfigFn<TUserConfig>;
-    /** @deprecated This method will be removed in a future version. Extend `StreamableHttpRunner` and override `createServerForRequest` instead. */
-    protected readonly createApiClient: ApiClientFactoryFn;
 
     protected constructor({
         userConfig,
-        createConnectionManager = defaultCreateConnectionManager,
-        connectionErrorHandler = defaultConnectionErrorHandler,
-        createAtlasLocalClient = defaultCreateAtlasLocalClient,
         additionalLoggers = [],
         metrics,
-        telemetryProperties = {},
-        tools,
-        createSessionConfig,
-        createApiClient = defaultCreateApiClient,
     }: TransportRunnerConfig<TUserConfig, TMetrics>) {
         this.userConfig = userConfig;
-        this.createConnectionManager = createConnectionManager;
-        this.connectionErrorHandler = connectionErrorHandler;
-        this.createAtlasLocalClient = createAtlasLocalClient;
-        this.telemetryProperties = telemetryProperties;
-        this.tools = tools;
-        this.createSessionConfig = createSessionConfig;
-        this.createApiClient = createApiClient;
         this.metrics = metrics ?? new PrometheusMetrics({ definitions: createDefaultMetrics() as TMetrics });
         const loggers: LoggerBase[] = [...additionalLoggers];
         if (this.userConfig.loggers.includes("stderr")) {
@@ -302,7 +200,7 @@ export abstract class TransportRunnerBase<
 
         const connectionManager =
             sessionOptions?.connectionManager ??
-            (await this.createConnectionManager({ logger: logger, deviceId: this.deviceId, userConfig }));
+            (await defaultCreateConnectionManager({ logger: logger, deviceId: this.deviceId, userConfig }));
 
         const apiClient =
             userConfig.apiClientId && userConfig.apiClientSecret
@@ -321,9 +219,9 @@ export abstract class TransportRunnerBase<
         const session = new Session({
             userConfig,
             atlasLocalClient:
-                sessionOptions?.atlasLocalClient ?? (await this.createAtlasLocalClient({ logger: this.logger })),
+                sessionOptions?.atlasLocalClient ?? (await defaultCreateAtlasLocalClient({ logger: this.logger })),
             logger,
-            connectionErrorHandler: sessionOptions?.connectionErrorHandler ?? this.connectionErrorHandler,
+            connectionErrorHandler: sessionOptions?.connectionErrorHandler ?? defaultConnectionErrorHandler,
             exportsManager,
             connectionManager,
             keychain: Keychain.root,
@@ -331,7 +229,7 @@ export abstract class TransportRunnerBase<
         });
 
         const telemetry = Telemetry.create(session, userConfig, this.deviceId, {
-            commonProperties: serverOptions?.telemetryProperties ?? this.telemetryProperties,
+            commonProperties: serverOptions?.telemetryProperties,
         });
 
         let uiRegistry: UIRegistry | undefined = serverOptions?.uiRegistry;
@@ -345,9 +243,8 @@ export abstract class TransportRunnerBase<
             session,
             telemetry,
             userConfig,
-            connectionErrorHandler: sessionOptions?.connectionErrorHandler ?? this.connectionErrorHandler,
             elicitation: serverOptions?.elicitation ?? new Elicitation({ server: mcpServer.server }),
-            tools: serverOptions?.tools ?? this.tools,
+            tools: serverOptions?.tools,
             uiRegistry,
             toolContext: serverOptions?.toolContext,
             metrics: this.metrics,
@@ -360,56 +257,6 @@ export abstract class TransportRunnerBase<
         }
 
         return result;
-    }
-
-    /**
-     * @deprecated Remove all session hooks and use `start({serverOptions, sessionOptions})` or override `StreamableHttpRunner.createServerForRequest` instead. This method will be removed in a future version.
-     *
-     * Creates a new MCP server instance and handles session config resolution.
-     * For new code, prefer using `createServer` with pre-resolved configuration.
-     */
-    protected async setupServer(
-        request?: RequestContext,
-        {
-            serverOptions,
-        }: {
-            serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-        } = {}
-    ): Promise<Server<TUserConfig, TContext>> {
-        let userConfig: TUserConfig = this.userConfig;
-
-        if (this.createSessionConfig) {
-            userConfig = await this.createSessionConfig({ userConfig, request });
-        } else {
-            userConfig = applyConfigOverrides({ baseConfig: this.userConfig, request });
-        }
-
-        return this.createServer({
-            userConfig,
-            serverOptions,
-            sessionOptions: {
-                connectionManager: await this.createConnectionManager({
-                    logger: this.logger,
-                    deviceId: this.deviceId,
-                    userConfig,
-                }),
-                atlasLocalClient: await this.createAtlasLocalClient({ logger: this.logger }),
-                apiClient:
-                    userConfig.apiClientId && userConfig.apiClientSecret
-                        ? this.createApiClient(
-                              {
-                                  baseUrl: userConfig.apiBaseUrl,
-                                  credentials: {
-                                      clientId: userConfig.apiClientId,
-                                      clientSecret: userConfig.apiClientSecret,
-                                  },
-                                  requestContext: request,
-                              },
-                              this.logger
-                          )
-                        : undefined,
-            },
-        });
     }
 
     abstract start({

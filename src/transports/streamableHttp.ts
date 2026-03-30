@@ -17,6 +17,10 @@ import {
 import { getRandomUUID } from "../helpers/getRandomUUID.js";
 import type { CustomizableServerOptions, Server, UserConfig } from "../lib.js";
 import { applyConfigOverrides, ConfigOverrideError } from "../common/config/configOverrides.js";
+import { defaultCreateConnectionManager } from "../common/connectionManager.js";
+import { connectionErrorHandler as defaultConnectionErrorHandler } from "../common/connectionErrorHandler.js";
+import { defaultCreateAtlasLocalClient } from "../common/atlasLocal.js";
+import { defaultCreateApiClient } from "../common/atlas/apiClient.js";
 import type { DefaultMetrics, Metrics } from "../common/metrics/index.js";
 import type { MonitoringServerFeature } from "../common/schemas.js";
 
@@ -61,8 +65,8 @@ export class StreamableHttpRunner<
         await this.mcpServer.start();
 
         this.monitoringServer = await MonitoringServer.create({
-            host: this.userConfig.monitoringServerHost ?? this.userConfig.healthCheckHost,
-            port: this.userConfig.monitoringServerPort ?? this.userConfig.healthCheckPort,
+            host: this.userConfig.monitoringServerHost,
+            port: this.userConfig.monitoringServerPort,
             features: this.userConfig.monitoringServerFeatures,
             logger: this.logger,
             metrics: this.metrics,
@@ -99,38 +103,32 @@ export class StreamableHttpRunner<
         /** Upstream `sessionOptions` passed from running `runner.start({ sessionOptions })` method */
         sessionOptions?: CustomizableSessionOptions<TUserConfig>;
     }): Promise<Server<TUserConfig, TContext>> {
-        let userConfig: TUserConfig = sessionOptions?.userConfig ?? this.userConfig;
-
-        if (this.createSessionConfig) {
-            userConfig = await this.createSessionConfig({ userConfig, request });
-        } else {
-            userConfig = applyConfigOverrides({ baseConfig: userConfig, request });
-        }
+        const userConfig: TUserConfig = applyConfigOverrides({
+            baseConfig: sessionOptions?.userConfig ?? this.userConfig,
+            request,
+        });
 
         const logger = new CompositeLogger(this.logger);
 
         return this.createServer({
             userConfig,
             logger,
-            serverOptions: {
-                tools: this.tools,
-                ...serverOptions,
-            },
+            serverOptions,
             sessionOptions: {
                 ...sessionOptions,
-                connectionErrorHandler: sessionOptions?.connectionErrorHandler ?? this.connectionErrorHandler,
+                connectionErrorHandler: sessionOptions?.connectionErrorHandler ?? defaultConnectionErrorHandler,
                 connectionManager:
                     sessionOptions?.connectionManager ??
-                    (await this.createConnectionManager({
+                    (await defaultCreateConnectionManager({
                         logger,
                         deviceId: this.deviceId,
                         userConfig,
                     })),
-                atlasLocalClient: sessionOptions?.atlasLocalClient ?? (await this.createAtlasLocalClient({ logger })),
+                atlasLocalClient: sessionOptions?.atlasLocalClient ?? (await defaultCreateAtlasLocalClient({ logger })),
                 apiClient:
                     sessionOptions?.apiClient ??
                     (userConfig.apiClientId && userConfig.apiClientSecret
-                        ? this.createApiClient(
+                        ? defaultCreateApiClient(
                               {
                                   baseUrl: userConfig.apiBaseUrl,
                                   credentials: {
@@ -147,10 +145,6 @@ export class StreamableHttpRunner<
     }
 
     private validateConfig(): void {
-        if ((this.userConfig.healthCheckHost === undefined) !== (this.userConfig.healthCheckPort === undefined)) {
-            throw new Error("Both healthCheckHost and healthCheckPort must be defined to enable health checks.");
-        }
-
         if (
             (this.userConfig.monitoringServerHost === undefined) !==
             (this.userConfig.monitoringServerPort === undefined)
@@ -160,7 +154,7 @@ export class StreamableHttpRunner<
             );
         }
 
-        const effectivePort = this.userConfig.monitoringServerPort ?? this.userConfig.healthCheckPort;
+        const effectivePort = this.userConfig.monitoringServerPort;
         if (effectivePort !== undefined && effectivePort !== 0 && effectivePort === this.userConfig.httpPort) {
             throw new Error("Monitoring server port cannot be the same as httpPort.");
         }

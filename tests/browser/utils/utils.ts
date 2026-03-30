@@ -9,7 +9,7 @@ export class BrowserTestRunner extends TransportRunnerBase {
     }
 
     async start(): Promise<void> {
-        await this.setupServer();
+        await this.createServer();
 
         // Create MCP client
         this.client = new Client(
