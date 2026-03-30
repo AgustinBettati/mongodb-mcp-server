@@ -1,11 +1,8 @@
 export { Server, type ServerOptions, type AnyToolClass } from "./server.js";
-export { Session, type SessionOptions } from "./common/session.js";
+export { Session } from "./common/session.js";
 export { type UserConfig, UserConfigSchema } from "./common/config/userConfig.js";
 export { parseUserConfig, defaultParserOptions, type ParserOptions } from "./common/config/parseUserConfig.js";
 
-export { defaultCreateConnectionManager } from "./common/connectionManager.js";
-
-export { defaultCreateApiClient } from "./common/atlas/apiClient.js";
 export { defaultCreateAtlasLocalClient } from "./common/atlasLocal.js";
 
 export {
@@ -22,8 +19,9 @@ export {
     TransportRunnerBase,
     type TransportRunnerConfig,
     type CustomizableServerOptions,
-    type CustomizableSessionOptions,
+    type ServerCradle,
 } from "./transports/base.js";
+export { DIContainer } from "./common/diContainer.js";
 export {
     ConnectionManager,
     ConnectionStateConnected,
@@ -31,7 +29,6 @@ export {
     type ConnectionState,
     type ConnectionStateDisconnected,
     type ConnectionStateErrored,
-    type ConnectionManagerFactoryFn,
 } from "./common/connectionManager.js";
 export {
     connectionErrorHandler,

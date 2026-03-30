@@ -10,7 +10,7 @@ import { Keychain } from "../../../src/common/keychain.js";
 import { ErrorCodes, MongoDBError } from "../../../src/common/errors.js";
 import { defaultTestConfig } from "../../integration/helpers.js";
 import { connectionErrorHandler as defaultConnectionErrorHandler } from "../../../src/common/connectionErrorHandler.js";
-import { defaultCreateApiClient } from "../../../src/lib.js";
+import { ApiClient } from "../../../src/lib.js";
 
 vi.mock("@mongosh/service-provider-node-driver");
 
@@ -37,7 +37,7 @@ describe("Session", () => {
             exportsManager: ExportsManager.init(defaultTestConfig, logger),
             connectionManager: connectionManager,
             keychain: new Keychain(),
-            apiClient: defaultCreateApiClient(
+            apiClient: new ApiClient(
                 {
                     baseUrl: defaultTestConfig.apiBaseUrl,
                     credentials: {

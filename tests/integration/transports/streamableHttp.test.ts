@@ -11,11 +11,7 @@ import type { OperationType, ToolArgs, ToolCategory, ToolExecutionContext } from
 import { ToolBase } from "../../../src/tools/tool.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { TelemetryToolMetadata } from "../../../src/telemetry/types.js";
-import type {
-    CustomizableServerOptions,
-    CustomizableSessionOptions,
-    RequestContext,
-} from "../../../src/transports/base.js";
+import type { CustomizableServerOptions, RequestContext } from "../../../src/transports/base.js";
 import type { AnyToolClass, Server } from "../../../src/lib.js";
 
 describe("StreamableHttpRunner", () => {
@@ -233,7 +229,9 @@ describe("StreamableHttpRunner", () => {
             const logger = new InMemoryLogger(new Keychain());
             const runner = new StreamableHttpRunner({
                 userConfig: config,
-                additionalLoggers: [logger],
+                configureDependencies: (container) => {
+                    container.register("loggers", "test", container.asValue(logger));
+                },
             });
             await runner.start();
 
@@ -716,11 +714,9 @@ describe("StreamableHttpRunner", () => {
                 protected async createServerForRequest({
                     request,
                     serverOptions,
-                    sessionOptions,
                 }: {
                     request: RequestContext;
                     serverOptions?: CustomizableServerOptions<UserConfig, ToolContext>;
-                    sessionOptions?: CustomizableSessionOptions<UserConfig>;
                 }): Promise<Server<UserConfig, ToolContext>> {
                     // Extract custom header to determine configuration
                     const userRole = request.headers?.["x-user-role"];
@@ -752,7 +748,7 @@ describe("StreamableHttpRunner", () => {
 
                     return this.createServer({
                         userConfig: sessionConfig,
-                        sessionOptions,
+                        container: await this.createServerContainer(sessionConfig),
                         serverOptions: {
                             ...serverOptions,
                             toolContext,

@@ -9,7 +9,7 @@ import { DeviceId } from "../../../../src/helpers/deviceId.js";
 import { Keychain } from "../../../../src/common/keychain.js";
 import { defaultTestConfig } from "../../../integration/helpers.js";
 import { connectionErrorHandler } from "../../../../src/common/connectionErrorHandler.js";
-import { defaultCreateApiClient } from "../../../../src/lib.js";
+import { ApiClient } from "../../../../src/lib.js";
 
 describe("debug resource", () => {
     const logger = new CompositeLogger();
@@ -24,7 +24,7 @@ describe("debug resource", () => {
             connectionManager,
             keychain: new Keychain(),
             connectionErrorHandler,
-            apiClient: defaultCreateApiClient(
+            apiClient: new ApiClient(
                 {
                     baseUrl: defaultTestConfig.apiBaseUrl,
                     credentials: {

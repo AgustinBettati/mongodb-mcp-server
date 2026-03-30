@@ -17,20 +17,16 @@ import { ErrorCodes, MongoDBError } from "./errors.js";
 import type { ExportsManager } from "./exportsManager.js";
 import type { Client } from "@mongodb-js/atlas-local";
 import type { Keychain } from "./keychain.js";
+import { type ConnectionErrorHandler } from "./connectionErrorHandler.js";
 import { generateConnectionInfoFromCliArgs } from "@mongosh/arg-parser";
 import { type UserConfig } from "../common/config/userConfig.js";
-import { type ConnectionErrorHandler } from "./connectionErrorHandler.js";
+import type { RunnerCradle, ServerCradle } from "../transports/base.js";
 
-export interface SessionOptions<TUserConfig extends UserConfig = UserConfig> {
-    userConfig: TUserConfig;
-    logger: CompositeLogger;
-    exportsManager: ExportsManager;
-    connectionManager: ConnectionManager;
-    keychain: Keychain;
-    atlasLocalClient?: Client;
-    connectionErrorHandler: ConnectionErrorHandler;
-    apiClient?: ApiClient;
-}
+type SessionOptions = Pick<
+    ServerCradle,
+    "logger" | "connectionManager" | "atlasLocalClient" | "apiClient" | "connectionErrorHandler" | "exportsManager"
+> &
+    Pick<RunnerCradle, "keychain" | "userConfig">;
 
 export type SessionEvents = {
     connect: [];
@@ -66,7 +62,7 @@ export class Session extends EventEmitter<SessionEvents> {
         atlasLocalClient,
         connectionErrorHandler,
         apiClient,
-    }: SessionOptions<UserConfig>) {
+    }: SessionOptions) {
         super();
 
         this.userConfig = userConfig;

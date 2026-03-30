@@ -1,14 +1,6 @@
 import type { Client } from "@mongodb-js/atlas-local";
 import { LogId, type LoggerBase } from "./logging/index.js";
 
-export type AtlasLocalClientFactoryFn = ({
-    logger,
-    loader,
-}: {
-    logger: LoggerBase;
-    loader?: LibraryLoader;
-}) => Promise<Client | undefined>;
-
 export interface LibraryLoader {
     loadAtlasLocalClient: (logger: LoggerBase) => Promise<typeof Client | undefined>;
 }
@@ -46,7 +38,13 @@ class DefaultLibraryLoader implements LibraryLoader {
     }
 }
 
-export const defaultCreateAtlasLocalClient: AtlasLocalClientFactoryFn = async ({ logger, loader }) => {
+export async function defaultCreateAtlasLocalClient({
+    logger,
+    loader,
+}: {
+    logger: LoggerBase;
+    loader?: LibraryLoader;
+}): Promise<Client | undefined> {
     const libraryLoader = loader ?? DefaultLibraryLoader.instance;
     const client = await libraryLoader.loadAtlasLocalClient(logger);
 
@@ -64,4 +62,4 @@ export const defaultCreateAtlasLocalClient: AtlasLocalClientFactoryFn = async ({
 
         return undefined;
     }
-};
+}

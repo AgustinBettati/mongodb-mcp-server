@@ -6,21 +6,12 @@ import type {
 } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { LoggerBase } from "../common/logging/index.js";
-import { CompositeLogger, LogId } from "../common/logging/index.js";
+import { LogId } from "../common/logging/index.js";
 import { SessionStore } from "../common/sessionStore.js";
-import {
-    TransportRunnerBase,
-    type TransportRunnerConfig,
-    type RequestContext,
-    type CustomizableSessionOptions,
-} from "./base.js";
+import { TransportRunnerBase, type TransportRunnerConfig, type RequestContext } from "./base.js";
 import { getRandomUUID } from "../helpers/getRandomUUID.js";
 import type { CustomizableServerOptions, Server, UserConfig } from "../lib.js";
 import { applyConfigOverrides, ConfigOverrideError } from "../common/config/configOverrides.js";
-import { defaultCreateConnectionManager } from "../common/connectionManager.js";
-import { connectionErrorHandler as defaultConnectionErrorHandler } from "../common/connectionErrorHandler.js";
-import { defaultCreateAtlasLocalClient } from "../common/atlasLocal.js";
-import { defaultCreateApiClient } from "../common/atlas/apiClient.js";
 import type { DefaultMetrics, Metrics } from "../common/metrics/index.js";
 import type { MonitoringServerFeature } from "../common/schemas.js";
 
@@ -46,19 +37,16 @@ export class StreamableHttpRunner<
     /** Starts the transport runner. */
     async start({
         serverOptions,
-        sessionOptions,
     }: {
         /** Server options to use when creating the server. */
         serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-        /** Session options to use when creating the session. */
-        sessionOptions?: CustomizableSessionOptions<TUserConfig>;
     } = {}): Promise<void> {
         this.validateConfig();
 
         this.mcpServer = new MCPHttpServer<TUserConfig, TContext>({
             userConfig: this.userConfig,
             createServerForRequest: ({ request }): Promise<Server<TUserConfig, TContext>> =>
-                this.createServerForRequest({ request, serverOptions, sessionOptions }),
+                this.createServerForRequest({ request, serverOptions }),
             logger: this.logger,
             metrics: this.metrics,
         });
@@ -95,53 +83,19 @@ export class StreamableHttpRunner<
     protected async createServerForRequest({
         request,
         serverOptions,
-        sessionOptions,
     }: {
         request: RequestContext;
         /** Upstream `serverOptions` passed from running `runner.start({ serverOptions })` method */
         serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-        /** Upstream `sessionOptions` passed from running `runner.start({ sessionOptions })` method */
-        sessionOptions?: CustomizableSessionOptions<TUserConfig>;
     }): Promise<Server<TUserConfig, TContext>> {
         const userConfig: TUserConfig = applyConfigOverrides({
-            baseConfig: sessionOptions?.userConfig ?? this.userConfig,
+            baseConfig: this.userConfig,
             request,
         });
 
-        const logger = new CompositeLogger(this.logger);
+        const container = await this.createServerContainer(userConfig);
 
-        return this.createServer({
-            userConfig,
-            logger,
-            serverOptions,
-            sessionOptions: {
-                ...sessionOptions,
-                connectionErrorHandler: sessionOptions?.connectionErrorHandler ?? defaultConnectionErrorHandler,
-                connectionManager:
-                    sessionOptions?.connectionManager ??
-                    (await defaultCreateConnectionManager({
-                        logger,
-                        deviceId: this.deviceId,
-                        userConfig,
-                    })),
-                atlasLocalClient: sessionOptions?.atlasLocalClient ?? (await defaultCreateAtlasLocalClient({ logger })),
-                apiClient:
-                    sessionOptions?.apiClient ??
-                    (userConfig.apiClientId && userConfig.apiClientSecret
-                        ? defaultCreateApiClient(
-                              {
-                                  baseUrl: userConfig.apiBaseUrl,
-                                  credentials: {
-                                      clientId: userConfig.apiClientId,
-                                      clientSecret: userConfig.apiClientSecret,
-                                  },
-                                  requestContext: request,
-                              },
-                              logger
-                          )
-                        : undefined),
-            },
-        });
+        return this.createServer({ userConfig, container, serverOptions });
     }
 
     private validateConfig(): void {
@@ -267,21 +221,18 @@ abstract class ExpressBasedHttpServer {
 class MCPHttpServer<TUserConfig extends UserConfig = UserConfig, TContext = unknown> extends ExpressBasedHttpServer {
     private sessionStore!: SessionStore<StreamableHTTPServerTransport>;
     private readonly serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-    private readonly sessionOptions?: CustomizableSessionOptions<TUserConfig>;
     private readonly userConfig: UserConfig;
     private readonly metrics: Metrics<DefaultMetrics>;
 
     private createServerForRequest: (createParams: {
         request: RequestContext;
         serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-        sessionOptions?: CustomizableSessionOptions<TUserConfig>;
     }) => Promise<Server<TUserConfig, TContext>>;
 
     constructor({
         userConfig,
         createServerForRequest,
         serverOptions,
-        sessionOptions,
         logger,
         metrics,
     }: {
@@ -289,11 +240,9 @@ class MCPHttpServer<TUserConfig extends UserConfig = UserConfig, TContext = unkn
         createServerForRequest: (createParams: {
             request: RequestContext;
             serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-            sessionOptions?: CustomizableSessionOptions<TUserConfig>;
         }) => Promise<Server<TUserConfig, TContext>>;
         logger: LoggerBase;
         serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-        sessionOptions?: CustomizableSessionOptions<TUserConfig>;
         metrics: Metrics<DefaultMetrics>;
     }) {
         super({
@@ -303,7 +252,6 @@ class MCPHttpServer<TUserConfig extends UserConfig = UserConfig, TContext = unkn
             logContext: "mcpHttpServer",
         });
         this.serverOptions = serverOptions;
-        this.sessionOptions = sessionOptions;
         this.createServerForRequest = createServerForRequest;
         this.userConfig = userConfig;
         this.metrics = metrics;
@@ -477,7 +425,6 @@ class MCPHttpServer<TUserConfig extends UserConfig = UserConfig, TContext = unkn
             const server = await this.createServerForRequest({
                 request,
                 serverOptions: this.serverOptions,
-                sessionOptions: this.sessionOptions,
             });
 
             sessionId = sessionId ?? getRandomUUID();

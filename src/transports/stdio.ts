@@ -1,9 +1,8 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { LogId } from "../common/logging/index.js";
 import type { Server } from "../server.js";
-import type { CustomizableServerOptions } from "./base.js";
-import type { CustomizableSessionOptions } from "./base.js";
-import { TransportRunnerBase, type TransportRunnerConfig } from "./base.js";
+import type { CustomizableServerOptions, TransportRunnerConfig } from "./base.js";
+import { TransportRunnerBase } from "./base.js";
 import type { UserConfig } from "../lib.js";
 import type { DefaultMetrics } from "../common/metrics/index.js";
 
@@ -20,13 +19,11 @@ export class StdioRunner<
 
     async start({
         serverOptions,
-        sessionOptions,
     }: {
         serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-        sessionOptions?: CustomizableSessionOptions<TUserConfig>;
     } = {}): Promise<void> {
         try {
-            this.server = await this.createServer({ serverOptions, sessionOptions });
+            this.server = await this.createServer({ serverOptions });
             const transport = new StdioServerTransport();
 
             await this.server.connect(transport);

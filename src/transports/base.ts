@@ -1,7 +1,7 @@
 import type { UserConfig } from "../common/config/userConfig.js";
 import { packageInfo } from "../common/packageInfo.js";
 import { Server, type ServerOptions } from "../server.js";
-import { Session, type SessionOptions } from "../common/session.js";
+import { Session } from "../common/session.js";
 import { Telemetry } from "../telemetry/telemetry.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { LoggerBase } from "../common/logging/index.js";
@@ -9,8 +9,14 @@ import { CompositeLogger, ConsoleLogger, DiskLogger, McpLogger } from "../common
 import { ExportsManager } from "../common/exportsManager.js";
 import { DeviceId } from "../helpers/deviceId.js";
 import { Keychain } from "../common/keychain.js";
-import { defaultCreateConnectionManager } from "../common/connectionManager.js";
-import { connectionErrorHandler as defaultConnectionErrorHandler } from "../common/connectionErrorHandler.js";
+import { DIContainer } from "../common/diContainer.js";
+import type { ConnectionManager } from "../common/connectionManager.js";
+import { MCPConnectionManager } from "../common/connectionManager.js";
+import {
+    connectionErrorHandler as defaultConnectionErrorHandler,
+    type ConnectionErrorHandler,
+} from "../common/connectionErrorHandler.js";
+import type { Client } from "@mongodb-js/atlas-local";
 import type { CommonProperties } from "../telemetry/types.js";
 import { Elicitation } from "../elicitation.js";
 import { defaultCreateAtlasLocalClient } from "../common/atlasLocal.js";
@@ -28,13 +34,6 @@ export type RequestContext = {
     query?: Record<string, string | string[] | undefined>;
 };
 
-export type CustomizableSessionOptions<TUserConfig extends UserConfig = UserConfig> = Partial<
-    Pick<
-        SessionOptions<TUserConfig>,
-        "userConfig" | "apiClient" | "atlasLocalClient" | "connectionManager" | "connectionErrorHandler"
-    >
->;
-
 export type CustomizableServerOptions<TUserConfig extends UserConfig = UserConfig, TContext = unknown> = Partial<
     Pick<ServerOptions<TUserConfig, TContext>, "uiRegistry" | "tools" | "toolContext" | "elicitation">
 > & {
@@ -44,6 +43,33 @@ export type CustomizableServerOptions<TUserConfig extends UserConfig = UserConfi
      * automatically.
      */
     telemetryProperties?: Partial<CommonProperties>;
+};
+
+/**
+ * Shape of the runner-scoped DI container.
+ */
+export type RunnerCradle = {
+    userConfig: UserConfig;
+    keychain: Keychain;
+    loggers: LoggerBase[];
+    logger: CompositeLogger;
+    deviceId: DeviceId;
+};
+
+/**
+ * Shape of the server-scoped DI container passed to `createServer`.
+ * Server-scoped containers are typically created via `runner.createServerContainer()`,
+ * which scopes from the runner container so factories can inject runner-level
+ * dependencies (`userConfig`, `keychain`, etc.).
+ */
+export type ServerCradle = {
+    logger: CompositeLogger;
+    connectionManager: ConnectionManager;
+    atlasLocalClient?: Client;
+    apiClient?: ApiClient;
+    connectionErrorHandler: ConnectionErrorHandler;
+    exportsManager: ExportsManager;
+    session: Session;
 };
 
 /**
@@ -86,14 +112,15 @@ export type TransportRunnerConfig<
     userConfig: TUserConfig;
 
     /**
-     * An optional list of loggers to be used in addition to the default logger
-     * implementations. When not provided, MongoDB MCP Server will not utilize
-     * any loggers other than the default that it works with.
+     * An optional callback invoked before the runner builds its composite logger.
+     * Use this to register additional logger implementations or other dependencies.
      *
-     * Customize this only if the default enabled loggers (disk/stderr/mcp) are
-     * not covering your use-case.
+     * Logger implementations are registered via `container.register`, e.g.:
+     * `container.register("loggers", "cloud", container.asFunction(({ userConfig, keychain }) => new MyCloudLogger(userConfig.apiKey, keychain)).singleton())`.
+     * All `loggers` registrations are collected automatically into the composite logger.
+     * Both `userConfig` and `keychain` are available in the cradle for factory functions.
      */
-    additionalLoggers?: LoggerBase[];
+    configureDependencies?: (container: DIContainer<RunnerCradle>) => void;
 
     /**
      * An optional `Metrics` instance to use for recording metrics. When not
@@ -133,59 +160,160 @@ export abstract class TransportRunnerBase<
     public logger: LoggerBase;
     public metrics: Metrics<TMetrics>;
 
-    public deviceId: DeviceId;
     /** Base user configuration for the server. */
     protected readonly userConfig: TUserConfig;
+    /** Runner-scoped DI container. Use `runnerContainer.createScope<ServerCradle>()` to create a server-scoped child. */
+    public readonly runnerContainer: DIContainer<RunnerCradle>;
 
     protected constructor({
         userConfig,
-        additionalLoggers = [],
+        configureDependencies,
         metrics,
     }: TransportRunnerConfig<TUserConfig, TMetrics>) {
         this.userConfig = userConfig;
         this.metrics = metrics ?? new PrometheusMetrics({ definitions: createDefaultMetrics() as TMetrics });
-        const loggers: LoggerBase[] = [...additionalLoggers];
-        if (this.userConfig.loggers.includes("stderr")) {
-            loggers.push(new ConsoleLogger(Keychain.root));
-        }
 
-        if (this.userConfig.loggers.includes("disk")) {
-            loggers.push(
-                new DiskLogger(
-                    this.userConfig.logPath,
-                    (err) => {
-                        // If the disk logger fails to initialize, we log the error to stderr and exit
-                        // eslint-disable-next-line no-console
-                        console.error("Error initializing disk logger:", err);
-                        process.exit(1);
-                    },
-                    Keychain.root
-                )
+        this.runnerContainer = new DIContainer<RunnerCradle>();
+
+        this.runnerContainer.register("userConfig", this.runnerContainer.asValue(userConfig));
+        this.runnerContainer.register("keychain", this.runnerContainer.asValue(Keychain.root));
+
+        configureDependencies?.(this.runnerContainer);
+
+        if (userConfig.loggers.includes("stderr")) {
+            this.runnerContainer.register(
+                "loggers",
+                "console",
+                this.runnerContainer.asFunction(({ keychain }) => new ConsoleLogger(keychain)).singleton()
             );
         }
 
-        this.logger = new CompositeLogger(...loggers);
-        this.deviceId = DeviceId.create(this.logger);
+        if (userConfig.loggers.includes("disk")) {
+            this.runnerContainer.register(
+                "loggers",
+                "disk",
+                this.runnerContainer
+                    .asFunction(
+                        ({ userConfig, keychain }) =>
+                            new DiskLogger(
+                                userConfig.logPath,
+                                (err) => {
+                                    // eslint-disable-next-line no-console
+                                    console.error("Error initializing disk logger:", err);
+                                    process.exit(1);
+                                },
+                                keychain
+                            )
+                    )
+                    .singleton()
+            );
+        }
+
+        // resolve("loggers") throws if nothing was registered (e.g. loggers: [] with no
+        // configureDependencies). Guard so an empty config produces a silent composite logger.
+        let loggers: LoggerBase[];
+        try {
+            loggers = this.runnerContainer.resolve("loggers");
+        } catch {
+            loggers = [];
+        }
+        const logger = new CompositeLogger(...loggers);
+        this.runnerContainer.register("logger", this.runnerContainer.asValue(logger));
+
+        this.runnerContainer.register(
+            "deviceId",
+            this.runnerContainer
+                .asFunction(({ logger }) => DeviceId.create(logger))
+                .singleton()
+                .disposer((deviceId) => deviceId.close())
+        );
+
+        this.logger = logger;
+    }
+
+    /**
+     * Creates a fully-populated server-scoped DI container by scoping from the runner
+     * container and registering defaults for all `ServerCradle` dependencies.
+     *
+     * Pass a `userConfig` override to shadow the runner-level config on the scope —
+     * useful for per-request config overrides in HTTP transports.
+     *
+     * Callers can override individual dependencies by registering them on the returned
+     * container before passing it to `createServer`.
+     */
+    protected async createServerContainer(userConfig?: TUserConfig): Promise<DIContainer<RunnerCradle & ServerCradle>> {
+        const c = this.runnerContainer.createScope<ServerCradle>();
+
+        if (userConfig !== undefined) {
+            c.register("userConfig", c.asValue(userConfig));
+        }
+
+        c.register("logger", c.asValue(new CompositeLogger(this.logger)));
+
+        c.register(
+            "connectionManager",
+            c
+                .asFunction(
+                    ({ userConfig, logger, deviceId }) => new MCPConnectionManager(userConfig, logger, deviceId)
+                )
+                .scoped()
+        );
+
+        const logger = c.resolve("logger");
+        c.register("atlasLocalClient", c.asValue(await defaultCreateAtlasLocalClient({ logger })));
+
+        c.register(
+            "apiClient",
+            c
+                .asFunction(({ userConfig, logger }) =>
+                    userConfig.apiClientId && userConfig.apiClientSecret
+                        ? new ApiClient(
+                              {
+                                  baseUrl: userConfig.apiBaseUrl,
+                                  credentials: {
+                                      clientId: userConfig.apiClientId,
+                                      clientSecret: userConfig.apiClientSecret,
+                                  },
+                              },
+                              logger
+                          )
+                        : undefined
+                )
+                .scoped()
+        );
+
+        c.register("connectionErrorHandler", c.asValue(defaultConnectionErrorHandler));
+
+        c.register(
+            "exportsManager",
+            c.asFunction(({ userConfig, logger }) => ExportsManager.init(userConfig, logger)).scoped()
+        );
+
+        c.register("session", c.asClass(Session).scoped());
+
+        return c;
     }
 
     /**
      * Creates a new MCP server instance with the provided configuration.
-     * This method handles server instantiation but does NOT perform session config resolution.
+     * Dependencies are resolved from the `container`, which should be created via
+     * `createServerContainer()` and optionally customised before being passed in.
      *
-     * @param config - Configuration object containing userConfig and optional serverOptions
      * @returns A configured Server instance
      */
     protected async createServer({
         userConfig = this.userConfig,
+        container,
         serverOptions,
-        sessionOptions,
-        logger = new CompositeLogger(this.logger),
     }: {
         userConfig?: TUserConfig;
-        logger?: CompositeLogger;
+        container?: DIContainer<ServerCradle>;
         serverOptions?: CustomizableServerOptions<TUserConfig, TContext>;
-        sessionOptions?: CustomizableSessionOptions<TUserConfig>;
     } = {}): Promise<Server<TUserConfig, TContext>> {
+        container ??= await this.createServerContainer(userConfig);
+        const logger = container.resolve("logger");
+        const session = container.resolve("session");
+
         const mcpServer = new McpServer(
             {
                 name: packageInfo.mcpServerName,
@@ -196,39 +324,7 @@ export abstract class TransportRunnerBase<
             }
         );
 
-        const exportsManager = ExportsManager.init(userConfig, logger);
-
-        const connectionManager =
-            sessionOptions?.connectionManager ??
-            (await defaultCreateConnectionManager({ logger: logger, deviceId: this.deviceId, userConfig }));
-
-        const apiClient =
-            userConfig.apiClientId && userConfig.apiClientSecret
-                ? new ApiClient(
-                      {
-                          baseUrl: userConfig.apiBaseUrl,
-                          credentials: {
-                              clientId: userConfig.apiClientId,
-                              clientSecret: userConfig.apiClientSecret,
-                          },
-                      },
-                      logger
-                  )
-                : undefined;
-
-        const session = new Session({
-            userConfig,
-            atlasLocalClient:
-                sessionOptions?.atlasLocalClient ?? (await defaultCreateAtlasLocalClient({ logger: this.logger })),
-            logger,
-            connectionErrorHandler: sessionOptions?.connectionErrorHandler ?? defaultConnectionErrorHandler,
-            exportsManager,
-            connectionManager,
-            keychain: Keychain.root,
-            apiClient: sessionOptions?.apiClient ?? apiClient,
-        });
-
-        const telemetry = Telemetry.create(session, userConfig, this.deviceId, {
+        const telemetry = Telemetry.create(session, userConfig, this.runnerContainer.resolve("deviceId"), {
             commonProperties: serverOptions?.telemetryProperties,
         });
 
@@ -259,15 +355,7 @@ export abstract class TransportRunnerBase<
         return result;
     }
 
-    abstract start({
-        serverOptions,
-        sessionOptions,
-    }: {
-        /** Upstream `serverOptions` passed from running `runner.start({ serverOptions })` method */
-        serverOptions?: ServerOptions<TUserConfig, TContext>;
-        /** Upstream `sessionOptions` passed from running `runner.start({ sessionOptions })` method */
-        sessionOptions?: SessionOptions<TUserConfig>;
-    }): Promise<void>;
+    abstract start({ serverOptions }: { serverOptions?: ServerOptions<TUserConfig, TContext> }): Promise<void>;
 
     abstract closeTransport(): Promise<void>;
 
@@ -275,7 +363,7 @@ export abstract class TransportRunnerBase<
         try {
             await this.closeTransport();
         } finally {
-            this.deviceId.close();
+            await this.runnerContainer.dispose();
         }
     }
 

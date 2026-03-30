@@ -362,18 +362,3 @@ export class MCPConnectionManager extends ConnectionManager {
         }
     }
 }
-
-/**
- * Consumers of MCP server library have option to bring their own connection
- * management if they need to. To support that, we enable injecting connection
- * manager implementation through a factory function.
- */
-export type ConnectionManagerFactoryFn = (createParams: {
-    logger: LoggerBase;
-    deviceId: DeviceId;
-    userConfig: UserConfig;
-}) => Promise<ConnectionManager>;
-
-export const defaultCreateConnectionManager: ConnectionManagerFactoryFn = ({ logger, deviceId, userConfig }) => {
-    return Promise.resolve(new MCPConnectionManager(userConfig, logger, deviceId));
-};
