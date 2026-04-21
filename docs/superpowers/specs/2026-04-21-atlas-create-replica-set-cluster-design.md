@@ -91,3 +91,4 @@ export { CreateReplicaSetClusterTool } from "./create/createReplicaSetCluster.js
 - `pnpm run build` succeeds.
 - `pnpm run check` (lint / types / format / api-extractor) passes locally.
 - Manual smoke test via `pnpm run inspect` against cloud-dev with the dev service-account credentials: call the tool with a test project, confirm the cluster is requested and visible in Atlas UI.
+- **End-to-end verification through Claude:** configure the user's Claude MCP client to point at the locally built `dist/esm/index.js` with cloud-dev credentials and `MDB_MCP_API_BASE_URL=https://cloud-dev.mongodb.com`, restart the client, and drive the tool with a natural-language prompt (e.g. `"Create a replica set cluster named hackathon-rs in project <id>"`). Confirm the tool appears in the client, is invoked with the expected args, and the resulting cluster shows up in the cloud-dev Atlas UI.
