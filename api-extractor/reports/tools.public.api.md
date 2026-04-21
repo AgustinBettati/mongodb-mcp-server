@@ -500,6 +500,30 @@ export class CreateProjectTool extends AtlasToolBase {
     static toolName: string;
 }
 
+// @public (undocumented)
+export class CreateReplicaSetClusterTool extends AtlasToolBase {
+    // (undocumented)
+    argsShape: {
+        projectId: z.ZodString;
+        name: z.ZodString;
+        region: z.ZodDefault<z.ZodString>;
+        instanceSize: z.ZodDefault<z.ZodEnum<{
+            M10: "M10";
+            M20: "M20";
+            M30: "M30";
+            M40: "M40";
+        }>>;
+    };
+    // (undocumented)
+    description: string;
+    // (undocumented)
+    protected execute(input: ToolArgs<typeof CreateReplicaSetClusterTool.argsShape>): Promise<CallToolResult>;
+    // (undocumented)
+    static operationType: OperationType;
+    // (undocumented)
+    static toolName: string;
+}
+
 // Warning: (ae-forgotten-export) The symbol "DbStatsOutputSchema" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)

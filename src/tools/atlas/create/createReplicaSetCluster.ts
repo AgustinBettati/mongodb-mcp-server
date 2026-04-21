@@ -15,10 +15,7 @@ export class CreateReplicaSetClusterTool extends AtlasToolBase {
         projectId: AtlasArgs.projectId().describe("Atlas project ID to create the cluster in"),
         name: AtlasArgs.clusterName().describe("Name of the cluster"),
         region: AtlasArgs.region().describe("AWS region of the cluster").default("US_EAST_1"),
-        instanceSize: z
-            .enum(["M10", "M20", "M30", "M40"])
-            .describe("Dedicated instance size")
-            .default("M10"),
+        instanceSize: z.enum(["M10", "M20", "M30", "M40"]).describe("Dedicated instance size").default("M10"),
     };
 
     protected async execute({
