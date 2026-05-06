@@ -366,6 +366,28 @@ export class ApiClient {
         return data;
     }
 
+    async updateCluster(
+        groupId: string,
+        clusterName: string,
+        body: components["schemas"]["ClusterDescription20240805"]
+    ): Promise<components["schemas"]["ClusterDescription20240805"]> {
+        // openapi.d.ts (pinned to 2025-03-12) currently does not type PATCH for this
+        // path (`patch?: never`), but the Atlas API supports it: operation
+        // `updateCluster`, schema version 2024-08-05. The body shape is the same
+        // ClusterDescription20240805 used by createCluster.
+        const { data, error, response } = await this.client.PATCH(
+            "/api/atlas/v2/groups/{groupId}/clusters/{clusterName}" as never,
+            {
+                params: { path: { groupId, clusterName } },
+                body,
+            } as never
+        );
+        if (error) {
+            throw ApiClientError.fromError(response, error as never);
+        }
+        return data as components["schemas"]["ClusterDescription20240805"];
+    }
+
     async listDropIndexSuggestions(
         options: FetchOptions<operations["listGroupClusterPerformanceAdvisorDropIndexSuggestions"]>
     ): Promise<components["schemas"]["DropIndexSuggestionsResponse"]> {
