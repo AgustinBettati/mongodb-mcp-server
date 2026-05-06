@@ -15,3 +15,6 @@ export { StreamsDiscoverTool } from "./streams/discover.js";
 export { StreamsBuildTool } from "./streams/build.js";
 export { StreamsManageTool } from "./streams/manage.js";
 export { StreamsTeardownTool } from "./streams/teardown.js";
+export { CreateClusterTool } from "./create/createCluster.js";
+export { GetClusterTool } from "./read/getCluster.js";
+export { UpdateClusterTool } from "./update/updateCluster.js";
