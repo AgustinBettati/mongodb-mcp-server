@@ -2,7 +2,23 @@ import { z } from "zod";
 
 const electableSpecsSchema = z.object({
     instanceSize: z
-        .enum(["M0", "M2", "M5", "M10", "M20", "M30", "M40", "M50", "M60", "M80", "M140", "M200", "M300", "M400", "M700"])
+        .enum([
+            "M0",
+            "M2",
+            "M5",
+            "M10",
+            "M20",
+            "M30",
+            "M40",
+            "M50",
+            "M60",
+            "M80",
+            "M140",
+            "M200",
+            "M300",
+            "M400",
+            "M700",
+        ])
         .describe(
             "Atlas instance tier. M0/M2/M5 are TENANT (free/flex; backingProviderName required). " +
                 "M10+ are dedicated and require nodeCount. For production workloads use M30 or higher."
@@ -24,28 +40,28 @@ const electableSpecsSchema = z.object({
         .describe(
             "Storage size in GB. Optional; when autoScaling.diskGB.enabled is true, Atlas resizes this automatically."
         ),
-    diskIOPS: z.number().int().optional().describe("Provisioned IOPS for AWS provisioned storage. Leave unset to use defaults."),
+    diskIOPS: z
+        .number()
+        .int()
+        .optional()
+        .describe("Provisioned IOPS for AWS provisioned storage. Leave unset to use defaults."),
     ebsVolumeType: z.enum(["STANDARD", "PROVISIONED"]).optional(),
 });
 
 const computeAutoScalingSchema = z.object({
     enabled: z.boolean().describe("Master toggle for compute (instance size) autoscaling within this region config."),
-    scaleDownEnabled: z
-        .boolean()
-        .optional()
-        .describe("Allow autoscale-down. When true, minInstanceSize is required."),
+    scaleDownEnabled: z.boolean().optional().describe("Allow autoscale-down. When true, minInstanceSize is required."),
     minInstanceSize: z
         .string()
         .optional()
         .describe("Lower bound (e.g. 'M10'). Required when scaleDownEnabled is true."),
-    maxInstanceSize: z
-        .string()
-        .optional()
-        .describe("Upper bound (e.g. 'M40'). Required when enabled is true."),
+    maxInstanceSize: z.string().optional().describe("Upper bound (e.g. 'M40'). Required when enabled is true."),
 });
 
 const diskAutoScalingSchema = z.object({
-    enabled: z.boolean().describe("Master toggle for storage autoscaling. Strongly recommended for any production cluster."),
+    enabled: z
+        .boolean()
+        .describe("Master toggle for storage autoscaling. Strongly recommended for any production cluster."),
 });
 
 const autoScalingSchema = z
@@ -121,11 +137,7 @@ const tagSchema = z.object({
 });
 
 export const clusterConfigSchemaRaw = {
-    name: z
-        .string()
-        .min(1)
-        .max(64)
-        .describe("Cluster name. Immutable after creation."),
+    name: z.string().min(1).max(64).describe("Cluster name. Immutable after creation."),
     clusterType: z
         .enum(["REPLICASET", "SHARDED", "GEOSHARDED"])
         .describe(
@@ -139,7 +151,9 @@ export const clusterConfigSchemaRaw = {
     backupEnabled: z
         .boolean()
         .optional()
-        .describe("Enable continuous cloud backup. Required for production durability and prerequisite for PIT restore."),
+        .describe(
+            "Enable continuous cloud backup. Required for production durability and prerequisite for PIT restore."
+        ),
     pitEnabled: z
         .boolean()
         .optional()

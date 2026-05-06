@@ -46,15 +46,15 @@ Key files to read before coding:
 
 Every tool extends `ToolBase` (or more specifically `AtlasToolBase` for Atlas API tools) and provides four things:
 
-| Member | Purpose |
-| --- | --- |
-| `static toolName` | MCP tool ID (kebab-case, globally unique, e.g. `atlas-create-free-cluster`) |
-| `static category` | `"atlas" \| "atlas-local" \| "mongodb" \| "assistant"` — used for bulk enable/disable |
-| `static operationType` | `"metadata" \| "read" \| "create" \| "update" \| "delete" \| "connect"` — governs `readOnly` mode and destructive-hint annotations |
-| `description` | Human text shown to the LLM; make it action-oriented |
-| `argsShape` | `ZodRawShape` — the tool's input schema. Use `AtlasArgs` helpers for consistency |
-| `execute(args)` | The actual implementation — returns a `CallToolResult` |
-| `resolveTelemetryMetadata(args, { result })` | Return `{}` if you don't need custom telemetry (AtlasToolBase already extracts `projectId`/`orgId`) |
+| Member                                       | Purpose                                                                                                                            |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `static toolName`                            | MCP tool ID (kebab-case, globally unique, e.g. `atlas-create-free-cluster`)                                                        |
+| `static category`                            | `"atlas" \| "atlas-local" \| "mongodb" \| "assistant"` — used for bulk enable/disable                                              |
+| `static operationType`                       | `"metadata" \| "read" \| "create" \| "update" \| "delete" \| "connect"` — governs `readOnly` mode and destructive-hint annotations |
+| `description`                                | Human text shown to the LLM; make it action-oriented                                                                               |
+| `argsShape`                                  | `ZodRawShape` — the tool's input schema. Use `AtlasArgs` helpers for consistency                                                   |
+| `execute(args)`                              | The actual implementation — returns a `CallToolResult`                                                                             |
+| `resolveTelemetryMetadata(args, { result })` | Return `{}` if you don't need custom telemetry (AtlasToolBase already extracts `projectId`/`orgId`)                                |
 
 The server discovers tools by iterating `AllTools` in [src/tools/index.ts](src/tools/index.ts). A tool is registered only if:
 
@@ -84,47 +84,60 @@ import { AtlasArgs } from "../../args.js";
 import { z } from "zod";
 
 export class CreateDedicatedClusterTool extends AtlasToolBase {
-    static toolName = "atlas-create-dedicated-cluster";
-    public description = "Create a dedicated MongoDB Atlas cluster";
-    static operationType: OperationType = "create";
+  static toolName = "atlas-create-dedicated-cluster";
+  public description = "Create a dedicated MongoDB Atlas cluster";
+  static operationType: OperationType = "create";
 
-    public argsShape = {
-        projectId: AtlasArgs.projectId().describe("Atlas project ID"),
-        name: AtlasArgs.clusterName().describe("Name of the cluster"),
-        region: AtlasArgs.region().describe("Region").default("US_EAST_1"),
-        instanceSize: z.enum(["M10", "M20", "M30"]).default("M10"),
-        provider: z.enum(["AWS", "AZURE", "GCP"]).default("AWS"),
+  public argsShape = {
+    projectId: AtlasArgs.projectId().describe("Atlas project ID"),
+    name: AtlasArgs.clusterName().describe("Name of the cluster"),
+    region: AtlasArgs.region().describe("Region").default("US_EAST_1"),
+    instanceSize: z.enum(["M10", "M20", "M30"]).default("M10"),
+    provider: z.enum(["AWS", "AZURE", "GCP"]).default("AWS"),
+  };
+
+  protected async execute({
+    projectId,
+    name,
+    region,
+    instanceSize,
+    provider,
+  }: ToolArgs<typeof this.argsShape>): Promise<CallToolResult> {
+    const body = {
+      groupId: projectId,
+      name,
+      clusterType: "REPLICASET",
+      replicationSpecs: [
+        {
+          zoneName: "Zone 1",
+          regionConfigs: [
+            {
+              providerName: provider,
+              regionName: region,
+              electableSpecs: { instanceSize, nodeCount: 3 },
+              priority: 7,
+            },
+          ],
+        },
+      ],
+      terminationProtectionEnabled: false,
+    } as unknown as ClusterDescription20240805;
+
+    await ensureCurrentIpInAccessList(this.apiClient, projectId);
+    await this.apiClient.createCluster({
+      params: { path: { groupId: projectId } },
+      body,
+    });
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Cluster "${name}" (${instanceSize}) requested in ${region}.`,
+        },
+      ],
     };
-
-    protected async execute({
-        projectId, name, region, instanceSize, provider,
-    }: ToolArgs<typeof this.argsShape>): Promise<CallToolResult> {
-        const body = {
-            groupId: projectId,
-            name,
-            clusterType: "REPLICASET",
-            replicationSpecs: [{
-                zoneName: "Zone 1",
-                regionConfigs: [{
-                    providerName: provider,
-                    regionName: region,
-                    electableSpecs: { instanceSize, nodeCount: 3 },
-                    priority: 7,
-                }],
-            }],
-            terminationProtectionEnabled: false,
-        } as unknown as ClusterDescription20240805;
-
-        await ensureCurrentIpInAccessList(this.apiClient, projectId);
-        await this.apiClient.createCluster({
-            params: { path: { groupId: projectId } },
-            body,
-        });
-
-        return {
-            content: [{ type: "text", text: `Cluster "${name}" (${instanceSize}) requested in ${region}.` }],
-        };
-    }
+  }
 }
 ```
 
@@ -177,8 +190,8 @@ Call shape:
 
 ```ts
 await this.apiClient.createCluster({
-    params: { path: { groupId: projectId } },
-    body: clusterDescription, // ClusterDescription20240805
+  params: { path: { groupId: projectId } },
+  body: clusterDescription, // ClusterDescription20240805
 });
 ```
 
@@ -188,35 +201,35 @@ The client handles auth, user-agent, API version (`Accept: application/vnd.atlas
 
 Two caveats this raises:
 
-- If you add an `apiClient` method for an endpoint whose *latest* version is newer than `2025-03-12`, the global pin will silently fall back to an older handler. Either bump `ATLAS_API_VERSION` (and regenerate `openapi.d.ts`) or override `Accept` on that specific call — the pattern for per-call overrides is in [apiClient.ts:640](src/common/atlas/apiClient.ts:640) and [apiClient.ts:811](src/common/atlas/apiClient.ts:811).
+- If you add an `apiClient` method for an endpoint whose _latest_ version is newer than `2025-03-12`, the global pin will silently fall back to an older handler. Either bump `ATLAS_API_VERSION` (and regenerate `openapi.d.ts`) or override `Accept` on that specific call — the pattern for per-call overrides is in [apiClient.ts:640](src/common/atlas/apiClient.ts:640) and [apiClient.ts:811](src/common/atlas/apiClient.ts:811).
 - Old API-version shapes (anything with `numShards`, or response-only fields like `effectiveReplicationSpecs`) will not pass validation — always shape requests against the live examples in `hackathon-examples/`.
 
 Related methods you will likely also need:
 
-| Method | Purpose |
-| --- | --- |
-| `apiClient.getCluster({ params: { path: { groupId, clusterName } } })` | Poll state |
-| `apiClient.listClusters({ params: { path: { groupId } } })` | Enumerate clusters |
-| `apiClient.deleteCluster({ params: { path: { groupId, clusterName } } })` | Tear down |
-| `ensureCurrentIpInAccessList(apiClient, projectId)` | Add caller IP to the project's access list (needed before connecting) |
+| Method                                                                    | Purpose                                                               |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `apiClient.getCluster({ params: { path: { groupId, clusterName } } })`    | Poll state                                                            |
+| `apiClient.listClusters({ params: { path: { groupId } } })`               | Enumerate clusters                                                    |
+| `apiClient.deleteCluster({ params: { path: { groupId, clusterName } } })` | Tear down                                                             |
+| `ensureCurrentIpInAccessList(apiClient, projectId)`                       | Add caller IP to the project's access list (needed before connecting) |
 
 ### 4.2 The schema — `ClusterDescription20240805`
 
 The full TypeScript type lives in [src/common/atlas/openapi.d.ts](src/common/atlas/openapi.d.ts) at line 2511 (and is re-exported as `ClusterDescription20240805`). Key fields for creation:
 
-| Field | Notes |
-| --- | --- |
-| `name` | Cluster name (see `AtlasArgs.clusterName()` for validation) |
-| `clusterType` | `"REPLICASET" \| "SHARDED" \| "GEOSHARDED"` |
-| `replicationSpecs[]` | One entry for replica sets; one per shard for sharded clusters |
-| `replicationSpecs[].regionConfigs[]` | Per-region node config |
-| `...regionConfigs[].providerName` | `"AWS" \| "AZURE" \| "GCP" \| "TENANT"` (TENANT ⇒ free/shared M0/M2/M5) |
-| `...regionConfigs[].backingProviderName` | Required when `providerName = "TENANT"` |
-| `...regionConfigs[].regionName` | Cloud region (e.g. `"US_EAST_1"`) |
-| `...regionConfigs[].electableSpecs.instanceSize` | `"M0"` free; `"M10"`+ dedicated; see file for full enum |
-| `...regionConfigs[].electableSpecs.nodeCount` | Required for M10+ (typically 3) |
-| `...regionConfigs[].priority` | Required for dedicated; `7` for primary region |
-| `backupEnabled`, `pitEnabled`, `terminationProtectionEnabled`, `tags`, `mongoDBMajorVersion`, `replicaSetScalingStrategy`, `encryptionAtRestProvider` | Optional tuning knobs — all documented inline in `openapi.d.ts` |
+| Field                                                                                                                                                 | Notes                                                                   |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `name`                                                                                                                                                | Cluster name (see `AtlasArgs.clusterName()` for validation)             |
+| `clusterType`                                                                                                                                         | `"REPLICASET" \| "SHARDED" \| "GEOSHARDED"`                             |
+| `replicationSpecs[]`                                                                                                                                  | One entry for replica sets; one per shard for sharded clusters          |
+| `replicationSpecs[].regionConfigs[]`                                                                                                                  | Per-region node config                                                  |
+| `...regionConfigs[].providerName`                                                                                                                     | `"AWS" \| "AZURE" \| "GCP" \| "TENANT"` (TENANT ⇒ free/shared M0/M2/M5) |
+| `...regionConfigs[].backingProviderName`                                                                                                              | Required when `providerName = "TENANT"`                                 |
+| `...regionConfigs[].regionName`                                                                                                                       | Cloud region (e.g. `"US_EAST_1"`)                                       |
+| `...regionConfigs[].electableSpecs.instanceSize`                                                                                                      | `"M0"` free; `"M10"`+ dedicated; see file for full enum                 |
+| `...regionConfigs[].electableSpecs.nodeCount`                                                                                                         | Required for M10+ (typically 3)                                         |
+| `...regionConfigs[].priority`                                                                                                                         | Required for dedicated; `7` for primary region                          |
+| `backupEnabled`, `pitEnabled`, `terminationProtectionEnabled`, `tags`, `mongoDBMajorVersion`, `replicaSetScalingStrategy`, `encryptionAtRestProvider` | Optional tuning knobs — all documented inline in `openapi.d.ts`         |
 
 The repo uses `as unknown as ClusterDescription20240805` casts in several places because the generated type has many `readonly` fields and union variants. That pattern is fine — keep input shaping in your tool, and let the API layer return the real description.
 
@@ -224,12 +237,12 @@ The repo uses `as unknown as ClusterDescription20240805` casts in several places
 
 The [hackathon-examples/](hackathon-examples/) directory contains **real request bodies and the exact API responses** captured from cloud-dev. Use these as the source of truth when shaping the `body` you pass to `this.apiClient.createCluster(...)` — if your tool's payload doesn't match the shape of these requests, it will not create a cluster.
 
-| File | What it demonstrates |
-| --- | --- |
-| [hackathon-examples/replica-set-request.json](hackathon-examples/replica-set-request.json) | Minimal `REPLICASET` body with compute + disk autoscaling on a single region config |
-| [hackathon-examples/replica-set-response.json](hackathon-examples/replica-set-response.json) | Full response returned by the API (fields you can read after creation) |
-| [hackathon-examples/sharded-request.json](hackathon-examples/sharded-request.json) | `SHARDED` body — **one `replicationSpecs[]` entry per shard** (Independent Shard Scaling format) |
-| [hackathon-examples/sharded-response.json](hackathon-examples/sharded-response.json) | Full response for the two-shard cluster |
+| File                                                                                         | What it demonstrates                                                                             |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [hackathon-examples/replica-set-request.json](hackathon-examples/replica-set-request.json)   | Minimal `REPLICASET` body with compute + disk autoscaling on a single region config              |
+| [hackathon-examples/replica-set-response.json](hackathon-examples/replica-set-response.json) | Full response returned by the API (fields you can read after creation)                           |
+| [hackathon-examples/sharded-request.json](hackathon-examples/sharded-request.json)           | `SHARDED` body — **one `replicationSpecs[]` entry per shard** (Independent Shard Scaling format) |
+| [hackathon-examples/sharded-response.json](hackathon-examples/sharded-response.json)         | Full response for the two-shard cluster                                                          |
 
 Key rules these examples encode:
 

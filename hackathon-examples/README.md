@@ -21,12 +21,12 @@ to apply.
 
 Endpoint: `POST /api/atlas/v2/groups/{groupId}/clusters`
 
-| File | Shape |
-| --- | --- |
-| [replica-set-request.json](./replica-set-request.json) | `REPLICASET`, AWS US_EAST_1, 3×M10, autoscale M10→M40 |
-| [replica-set-response.json](./replica-set-response.json) | Full API response (`stateName: CREATING`) |
-| [sharded-request.json](./sharded-request.json) | `SHARDED`, 2 shards × 3×M30 in AWS US_EAST_1, autoscale M30→M60 |
-| [sharded-response.json](./sharded-response.json) | Full API response (`stateName: CREATING`) |
+| File                                                     | Shape                                                           |
+| -------------------------------------------------------- | --------------------------------------------------------------- |
+| [replica-set-request.json](./replica-set-request.json)   | `REPLICASET`, AWS US_EAST_1, 3×M10, autoscale M10→M40           |
+| [replica-set-response.json](./replica-set-response.json) | Full API response (`stateName: CREATING`)                       |
+| [sharded-request.json](./sharded-request.json)           | `SHARDED`, 2 shards × 3×M30 in AWS US_EAST_1, autoscale M30→M60 |
+| [sharded-response.json](./sharded-response.json)         | Full API response (`stateName: CREATING`)                       |
 
 ## Replica set — request highlights
 
@@ -34,24 +34,28 @@ Endpoint: `POST /api/atlas/v2/groups/{groupId}/clusters`
 {
   "name": "example-replica-set",
   "clusterType": "REPLICASET",
-  "replicationSpecs": [{
-    "zoneName": "Zone 1",
-    "regionConfigs": [{
-      "providerName": "AWS",
-      "regionName": "US_EAST_1",
-      "priority": 7,
-      "electableSpecs": { "instanceSize": "M10", "nodeCount": 3 },
-      "autoScaling": {
-        "compute": {
-          "enabled": true,
-          "scaleDownEnabled": true,
-          "minInstanceSize": "M10",
-          "maxInstanceSize": "M40"
-        },
-        "diskGB": { "enabled": true }
-      }
-    }]
-  }]
+  "replicationSpecs": [
+    {
+      "zoneName": "Zone 1",
+      "regionConfigs": [
+        {
+          "providerName": "AWS",
+          "regionName": "US_EAST_1",
+          "priority": 7,
+          "electableSpecs": { "instanceSize": "M10", "nodeCount": 3 },
+          "autoScaling": {
+            "compute": {
+              "enabled": true,
+              "scaleDownEnabled": true,
+              "minInstanceSize": "M10",
+              "maxInstanceSize": "M40"
+            },
+            "diskGB": { "enabled": true }
+          }
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -66,8 +70,18 @@ the two entries are identical:
   "name": "example-sharded",
   "clusterType": "SHARDED",
   "replicationSpecs": [
-    { "zoneName": "Zone 1", "regionConfigs": [ /* shard 1: 3×M30 + autoscale */ ] },
-    { "zoneName": "Zone 1", "regionConfigs": [ /* shard 2: 3×M30 + autoscale */ ] }
+    {
+      "zoneName": "Zone 1",
+      "regionConfigs": [
+        /* shard 1: 3×M30 + autoscale */
+      ]
+    },
+    {
+      "zoneName": "Zone 1",
+      "regionConfigs": [
+        /* shard 2: 3×M30 + autoscale */
+      ]
+    }
   ]
 }
 ```

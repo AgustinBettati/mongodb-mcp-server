@@ -19,10 +19,7 @@ export class CreateClusterTool extends AtlasToolBase {
         ...clusterConfigSchemaRaw,
     };
 
-    protected async execute({
-        projectId,
-        ...config
-    }: ToolArgs<typeof this.argsShape>): Promise<CallToolResult> {
+    protected async execute({ projectId, ...config }: ToolArgs<typeof this.argsShape>): Promise<CallToolResult> {
         await ensureCurrentIpInAccessList(this.apiClient, projectId);
         const body = config as unknown as ClusterDescription20240805;
         const cluster = await this.apiClient.createCluster({
