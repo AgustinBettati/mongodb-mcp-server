@@ -4,21 +4,24 @@ import { AtlasToolBase } from "../atlasTool.js";
 import type { ClusterDescription20240805 } from "../../../common/atlas/openapi.js";
 import { AtlasArgs } from "../../args.js";
 import { ApiClientError } from "../../../common/atlas/apiClientError.js";
-import { clusterConfigSchemaRaw } from "../shared/clusterConfig.js";
+import { clusterConfigUpdateSchemaRaw } from "../shared/clusterConfig.js";
 
 export class UpdateClusterTool extends AtlasToolBase {
     static toolName = "atlas-update-cluster";
     public description =
-        "Update an existing Atlas cluster. " +
-        "Workflow: ALWAYS call atlas-get-cluster first, modify the returned config in memory, then pass the full modified config here. " +
-        "This avoids accidentally clearing arrays like replicationSpecs or tags (the API replaces these wholesale). " +
-        "To pause, set paused: true (cluster must be IDLE first); to resume, set paused: false. " +
-        "If the cluster is not IDLE the API will reject the change — wait and retry.";
+        "Update an existing Atlas cluster. All config fields are OPTIONAL — send only what you want to change. " +
+        "Two distinct workflows:\n" +
+        "1. CONFIG CHANGES (resize, region changes, backup/termination toggles, tags, etc.): ALWAYS call atlas-get-cluster first, " +
+        "modify the returned config, and pass the FULL modified config here. The API replaces arrays like replicationSpecs and tags wholesale, " +
+        "so a partial config-change body would silently clear them.\n" +
+        "2. PAUSE/RESUME: Atlas REJECTS requests that combine `paused` with any other config field. To pause or resume, " +
+        "send ONLY { projectId, clusterName, paused: true|false } — no name, no replicationSpecs, no other fields. " +
+        "Cluster must be IDLE before it can be paused; the API rejects pause requests on non-IDLE clusters.";
     static operationType: OperationType = "update";
     public argsShape = {
         projectId: AtlasArgs.projectId().describe("Atlas project ID"),
         clusterName: AtlasArgs.clusterName().describe("Cluster to update"),
-        ...clusterConfigSchemaRaw,
+        ...clusterConfigUpdateSchemaRaw,
     };
 
     protected async execute({
@@ -27,7 +30,10 @@ export class UpdateClusterTool extends AtlasToolBase {
         ...config
     }: ToolArgs<typeof this.argsShape>): Promise<CallToolResult> {
         try {
-            const body = config as unknown as ClusterDescription20240805;
+            // Drop undefined keys so the PATCH body contains only fields the agent set.
+            const body = Object.fromEntries(
+                Object.entries(config).filter(([, v]) => v !== undefined)
+            ) as unknown as ClusterDescription20240805;
             const cluster = await this.apiClient.updateCluster(projectId, clusterName, body);
             return {
                 content: [

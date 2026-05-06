@@ -185,6 +185,18 @@ export const clusterConfigSchemaRaw = {
 export const clusterConfigSchema = z.object(clusterConfigSchemaRaw);
 export type ClusterConfig = z.infer<typeof clusterConfigSchema>;
 
+/**
+ * Update-flavor of the cluster config: every field optional so the agent can send
+ * partial bodies. Required for pause/resume — Atlas rejects PATCH requests that
+ * combine `paused` with any other config field (notably `replicationSpecs`).
+ */
+export const clusterConfigUpdateSchemaRaw = {
+    ...clusterConfigSchemaRaw,
+    name: clusterConfigSchemaRaw.name.optional(),
+    clusterType: clusterConfigSchemaRaw.clusterType.optional(),
+    replicationSpecs: clusterConfigSchemaRaw.replicationSpecs.optional(),
+};
+
 const READ_ONLY_TOP_LEVEL_FIELDS = [
     "id",
     "groupId",
